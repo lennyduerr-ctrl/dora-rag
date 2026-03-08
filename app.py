@@ -8,9 +8,6 @@ from src.chain import create_dora_agent
 
 st.set_page_config(page_title="Chat DORA", page_icon="📋", layout="centered")
 
-    st.write(f"API Base: {OPENAI_API_BASE or 'MISSING'}")
-    st.write(f"Supabase: {'set' if SUPABASE_URL else 'MISSING'}")
-
 
 @st.dialog("How it works")
 def show_how_it_works():
