@@ -5,14 +5,9 @@ import uuid
 import streamlit as st
 
 from src.chain import create_dora_agent
-from src.config import OPENAI_API_KEY, OPENAI_API_BASE, SUPABASE_URL
 
 st.set_page_config(page_title="Chat DORA", page_icon="📋", layout="centered")
 
-# Debug: config check (remove after verifying)
-with st.sidebar:
-    st.caption("Config Check")
-    st.write(f"API Key: {'set (' + OPENAI_API_KEY[:8] + '...)' if OPENAI_API_KEY else 'MISSING'}")
     st.write(f"API Base: {OPENAI_API_BASE or 'MISSING'}")
     st.write(f"Supabase: {'set' if SUPABASE_URL else 'MISSING'}")
 
