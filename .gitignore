@@ -1,0 +1,23 @@
+# Documents (too large for git)
+docs/
+
+# Environment
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Firecrawl
+.firecrawl/
+
+# Claude Code / Agent skills
+.agents/
+.claude/
+skills-lock.json
