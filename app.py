@@ -103,10 +103,16 @@ if question := st.chat_input("Stelle eine Frage zur DORA-Verordnung..."):
                     )
                     answer = result["messages"][-1].content
                 except Exception as exc:  # noqa: BLE001 - keep the UI alive
+                    from src.config import (
+                        EMBEDDING_MODEL,
+                        OPENAI_API_BASE,
+                        OPENROUTER_MODEL,
+                    )
                     answer = (
-                        "Es ist ein Fehler bei der Verarbeitung aufgetreten "
-                        f"({type(exc).__name__}). Bitte prüfe den OpenRouter-Key "
-                        "und das Modell."
+                        f"**Fehler ({type(exc).__name__}):** {exc}\n\n"
+                        f"- Base: `{OPENAI_API_BASE}`\n"
+                        f"- Chat-Modell: `{OPENROUTER_MODEL}`\n"
+                        f"- Embedding-Modell: `{EMBEDDING_MODEL}`"
                     )
             st.markdown(answer)
 
