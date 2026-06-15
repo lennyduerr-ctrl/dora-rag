@@ -245,6 +245,11 @@ Welche Übergangsfristen gelten für bestehende IKT-Drittparteienverträge?
 
 ## Lizenz / Hinweis
 
-Dieses Projekt ist eine Demonstration. Die DORA-Dokumente unterliegen dem
-Urheberrecht der jeweiligen Herausgeber (EU, BaFin, EBA/ESMA/EIOPA, ECB/BBK). Die
-Antworten stellen **keine Rechtsberatung** dar.
+Der **Code** dieses Projekts steht unter der **MIT-Lizenz** (siehe [LICENSE](LICENSE))
+— frei nutzbar, anpassbar und weitergebbar.
+
+Die **DORA-Dokumente** in `data/dora_docs.zip` sind davon **ausgenommen**: Sie
+unterliegen dem Urheberrecht der jeweiligen Herausgeber (EU, BaFin, EBA/ESMA/EIOPA,
+ECB/BBK) und sind nur zur Demonstration beigefügt.
+
+Dieses Projekt ist eine Demonstration; die Antworten stellen **keine Rechtsberatung** dar.
