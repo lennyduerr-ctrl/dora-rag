@@ -1,21 +1,38 @@
 """DORA Document Ingestion Pipeline.
 
-Loads PDFs from docs/, chunks them intelligently by document type,
-generates embeddings via OpenAI, and stores in Supabase pgvector.
+Loads PDFs from docs/, chunks them by document type, generates embeddings via
+OpenRouter, and writes a local vector store under data/:
+
+    data/dora_vectors.npy      float32 matrix [N, dim]  (one row per chunk)
+    data/dora_chunks.jsonl.gz  one {"content", "metadata"} per line (same order)
+
+These two files are committed to the repo, so the app runs with no database.
+Re-run this whenever the documents or the embedding model change.
 
 Usage:
     python -m src.ingest
 """
 
+import gzip
+import json
 import os
 import sys
 from pathlib import Path
 
+import numpy as np
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_openai import OpenAIEmbeddings
-from supabase import create_client
 
-from src.config import DOCS_DIR, OPENAI_API_BASE, OPENAI_API_KEY, SUPABASE_SERVICE_KEY, SUPABASE_URL
+from src.config import (
+    CHUNKS_PATH,
+    DATA_DIR,
+    DOCS_DIR,
+    EMBEDDING_MODEL,
+    OPENAI_API_BASE,
+    OPENAI_API_KEY,
+    VECTORS_PATH,
+    openrouter_configured,
+)
 from src.chunking import chunk_documents
 from src.metadata import parse_filename
 
@@ -27,12 +44,13 @@ def get_pdf_files() -> list[Path]:
     docs_path = Path(DOCS_DIR)
     if not docs_path.exists():
         print(f"ERROR: docs/ directory not found at {docs_path}")
-        print("Copy the 38 DORA PDFs into the docs/ folder first.")
+        print("Unzip data/dora_docs.zip into docs/ first (38 PDFs).")
         sys.exit(1)
 
     pdfs = sorted(docs_path.glob("*.pdf"))
     if not pdfs:
         print("ERROR: No PDF files found in docs/")
+        print("Unzip data/dora_docs.zip into docs/ first (38 PDFs).")
         sys.exit(1)
 
     return pdfs
@@ -57,11 +75,9 @@ def load_and_chunk(pdf_path: Path) -> list[dict]:
 
     chunks = chunk_documents(pages, doc_type)
 
-    # Merge file metadata into each chunk
     results = []
     for i, chunk in enumerate(chunks):
         chunk_metadata = {**metadata, "chunk_index": i}
-        # Remove loader-specific metadata that doesn't belong in the DB
         chunk_metadata.pop("source", None)
         chunk_metadata.pop("page", None)
         results.append({
@@ -72,46 +88,44 @@ def load_and_chunk(pdf_path: Path) -> list[dict]:
     return results
 
 
-def store_in_supabase(chunks: list[dict], embeddings_model: OpenAIEmbeddings):
-    """Generate embeddings and store chunks in Supabase."""
-    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+def build_vector_store(chunks: list[dict], embeddings_model: OpenAIEmbeddings):
+    """Embed all chunks and write data/dora_vectors.npy + data/dora_chunks.jsonl.gz."""
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     total = len(chunks)
-    stored = 0
+    vectors: list[list[float]] = []
 
     for i in range(0, total, BATCH_SIZE):
         batch = chunks[i : i + BATCH_SIZE]
         texts = [c["content"] for c in batch]
-
         print(f"  Embedding batch {i // BATCH_SIZE + 1} ({len(batch)} chunks)...")
-        vectors = embeddings_model.embed_documents(texts)
+        vectors.extend(embeddings_model.embed_documents(texts))
+        print(f"  Embedded {min(i + BATCH_SIZE, total)}/{total} chunks")
 
-        rows = [
-            {
-                "content": chunk["content"],
-                "metadata": chunk["metadata"],
-                "embedding": vector,
-            }
-            for chunk, vector in zip(batch, vectors)
-        ]
+    matrix = np.asarray(vectors, dtype=np.float32)
+    np.save(VECTORS_PATH, matrix)
 
-        supabase.table("dora_chunks").insert(rows).execute()
-        stored += len(rows)
-        print(f"  Stored {stored}/{total} chunks")
+    with gzip.open(CHUNKS_PATH, "wt", encoding="utf-8") as fh:
+        for c in chunks:
+            fh.write(json.dumps(
+                {"content": c["content"], "metadata": c["metadata"]},
+                ensure_ascii=False,
+            ) + "\n")
 
-    return stored
+    return matrix.shape
 
 
 def main():
     print("=" * 60)
-    print("DORA RAG Ingestion Pipeline")
+    print("DORA RAG Ingestion Pipeline (OpenRouter embeddings -> local store)")
     print("=" * 60)
 
-    # 1. Find PDFs
+    if not openrouter_configured():
+        sys.exit("ERROR: OPENAI_API_KEY (OpenRouter key) not set. See .env.example.")
+
     pdfs = get_pdf_files()
     print(f"\nFound {len(pdfs)} PDFs in docs/\n")
 
-    # 2. Load and chunk all documents
     print("--- Phase 1: Loading & Chunking ---")
     all_chunks = []
     for pdf in pdfs:
@@ -121,20 +135,19 @@ def main():
 
     print(f"Total: {len(all_chunks)} chunks from {len(pdfs)} documents\n")
 
-    # 3. Embed and store
-    print("--- Phase 2: Embedding & Storing ---")
+    print(f"--- Phase 2: Embedding ({EMBEDDING_MODEL}) & Saving ---")
     embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-large",
-        dimensions=1536,
+        model=EMBEDDING_MODEL,
         openai_api_key=OPENAI_API_KEY,
         openai_api_base=OPENAI_API_BASE,
+        check_embedding_ctx_length=False,
     )
 
-    stored = store_in_supabase(all_chunks, embeddings)
+    shape = build_vector_store(all_chunks, embeddings)
 
-    print(f"\nDone! {stored} chunks stored in Supabase.")
-    print("Check your Supabase dashboard: dora_chunks table")
-    print("Check LangSmith dashboard for tracing (if configured)")
+    print(f"\nDone! Vector store written: {shape[0]} chunks x {shape[1]} dims")
+    print(f"  {VECTORS_PATH}")
+    print(f"  {CHUNKS_PATH}")
 
 
 if __name__ == "__main__":

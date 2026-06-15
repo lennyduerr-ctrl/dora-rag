@@ -4,23 +4,27 @@
 RAG-Chatbot für das interne Compliance-Team. Beantwortet Fragen zur DORA-Verordnung basierend auf 38 bereinigten PDF-Dokumenten (Verordnungstexte, BaFin-FAQs, TIBER-EU Guidance, ESA Q&As).
 
 ## Tech-Stack
-- **Python 3.11+** mit LangChain
-- **Embeddings:** OpenAI `text-embedding-3-large` (1536 Dim., via OpenRouter)
-- **Vector Store:** Supabase pgvector
-- **LLM:** via OpenRouter (Modell flexibel)
-- **Tracing:** LangSmith
-- **UI (später):** Streamlit
+- **Python 3.11+** mit LangChain / LangGraph
+- **LLM:** OpenRouter `deepseek/deepseek-v4-flash` (über `OPENROUTER_MODEL` tauschbar)
+- **Embeddings:** OpenRouter `openai/text-embedding-3-small` (1536 Dim.)
+- **Vector Store:** In-Memory (NumPy Cosine) aus `data/dora_vectors.npy` — **kein** externer DB-Dienst
+- **Tracing:** LangSmith (optional)
+- **UI:** Streamlit (gehostet auf Streamlit Community Cloud)
+
+> **Ein OpenRouter-Key** (`OPENAI_API_KEY`, base `https://openrouter.ai/api/v1`)
+> treibt Chat **und** Embeddings. Kein Supabase/Azure mehr.
 
 ## Projektstruktur
 ```
-src/config.py      — Env-Variablen und Settings
+src/config.py      — Env-Variablen und Settings (OpenRouter)
 src/metadata.py    — Metadaten aus Dateinamen extrahieren
 src/chunking.py    — Dokumenttyp-basiertes Chunking (REG, FAQ, GUIDE, QA)
-src/ingest.py      — Haupt-Pipeline: PDF → Chunks → Embeddings → Supabase
+src/ingest.py      — Pipeline: PDF → Chunks → Embeddings → data/ (npy + jsonl.gz)
+src/vectorstore.py — In-Memory Cosine-Suche + Metadaten-Filter
 src/chain.py       — RAG Agent mit 5 spezialisierten Such-Tools + Experten-Prompt
 src/chat.py        — CLI-Chat zum Testen
-docs/              — 38 DORA-PDFs (nicht in Git)
-supabase_setup.sql — SQL für Tabelle + Match-Funktionen (normal + gefiltert)
+data/              — vorgerechnete Vektoren + dora_docs.zip (committed)
+docs/              — entpackte PDFs (nicht in Git)
 ```
 
 ## Dateinamen-Schema der PDFs
@@ -33,15 +37,15 @@ Typen: REG (Verordnung), CORR (Berichtigung), FAQ, GL (Leitlinie), GUIDE, QA
 - [x] Projektstruktur angelegt
 - [x] LangChain Skills installiert
 - [x] Ingestion-Code geschrieben
-- [x] .env mit API-Keys (OpenRouter, Supabase, LangSmith)
-- [x] PDFs in docs/ kopiert
-- [x] supabase_setup.sql in Supabase ausgeführt (HNSW-Index, 1536 Dim.)
-- [x] Ingestion erfolgreich: 1.406 Chunks in Supabase
+- [x] .env mit API-Key (OpenRouter; LangSmith optional)
+- [x] PDFs in docs/ (Quelle: data/dora_docs.zip)
+- [x] Ingestion erfolgreich: 1.406 Chunks → data/dora_vectors.npy (1536 Dim.)
+- [x] In-Memory-Vektorstore (NumPy Cosine) statt Supabase
 - [x] Retrieval-Chain mit 5 spezialisierten Such-Tools (Regulierung, BaFin, ESA, TIBER, Alles)
 - [x] Experten-System-Prompt (Zusammenfassung → Detailanalyse → Praxishinweise → Quellen)
 - [x] MemorySaver für Gesprächskontext
 - [x] CLI-Chat (src/chat.py)
-- [ ] Streamlit UI
+- [x] Streamlit UI (app.py) — live auf Streamlit Community Cloud
 
 ## Nächste Session: Streamlit UI "Chat DORA"
 App-Name: **Chat DORA**

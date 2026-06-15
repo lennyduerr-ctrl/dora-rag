@@ -1,0 +1,5 @@
+# Keep shell scripts LF; treat shipped data as binary (no line-ending munging).
+*.sh text eol=lf
+*.npy binary
+*.gz binary
+*.zip binary

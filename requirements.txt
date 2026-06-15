@@ -1,8 +1,10 @@
-langchain>=0.3
-langchain-community>=0.3
-langchain-openai>=0.3
-langsmith
-supabase
-pypdf
-python-dotenv
-streamlit
+# Pinned to versions verified locally (OpenRouter DeepSeek chat + embeddings).
+langchain==1.3.7
+langchain-community==0.4.2
+langchain-openai==1.3.0
+langgraph==1.2.4
+langsmith==0.8.14
+pypdf==6.13.2
+python-dotenv==1.2.2
+streamlit==1.58.0
+numpy==2.4.6

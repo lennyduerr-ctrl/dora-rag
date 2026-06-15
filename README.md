@@ -2,18 +2,25 @@
 
 **KI-gestützter Compliance-Assistent für die DORA-Verordnung (EU) 2022/2554**
 
-Ein RAG-Chatbot (Retrieval-Augmented Generation), der 38 offizielle DORA-Dokumente durchsucht und strukturierte Compliance-Analysen mit konkreten Artikelverweisen liefert.
+Ein RAG-Chatbot (Retrieval-Augmented Generation), der **38 offizielle DORA-Dokumente** durchsucht und strukturierte Compliance-Analysen mit konkreten Artikelverweisen liefert.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![LangChain](https://img.shields.io/badge/LangChain-0.3-green)
+![LangChain](https://img.shields.io/badge/LangChain-1.x-green)
 ![Streamlit](https://img.shields.io/badge/Streamlit-UI-red)
-![Supabase](https://img.shields.io/badge/Supabase-pgvector-orange)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-DeepSeek%20V4-8A2BE2)
+
+👉 **Live-Demo:** https://dora-chat.streamlit.app
+
+> **Kein externer Datenbank-Dienst nötig.** Die Vektoren liegen vorgerechnet im
+> Repo (`data/`), die App lädt sie in den Speicher und sucht lokal. Du brauchst
+> nur **einen kostenlosen OpenRouter-Key** — der treibt sowohl das Chat-Modell
+> als auch die Embeddings.
 
 ---
 
 ## Was ist DORA?
 
-Der **Digital Operational Resilience Act** (DORA) ist eine EU-Verordnung, die ab Januar 2025 einheitliche Anforderungen an die digitale Betriebsstabilität im Finanzsektor vorschreibt — von IKT-Risikomanagement über Vorfallmeldung bis hin zu Penetrationstests (TLPT). Die Regulierungslandschaft ist komplex: Verordnungstext, technische Standards (RTS/ITS), BaFin-FAQs, ESA Q&As und TIBER-Leitlinien verteilen sich auf Dutzende Dokumente.
+Der **Digital Operational Resilience Act** (DORA) ist eine EU-Verordnung, die seit Januar 2025 einheitliche Anforderungen an die digitale Betriebsstabilität im Finanzsektor vorschreibt — von IKT-Risikomanagement über Vorfallmeldung bis hin zu Penetrationstests (TLPT). Die Regulierungslandschaft ist komplex: Verordnungstext, technische Standards (RTS/ITS), BaFin-FAQs, ESA Q&As und TIBER-Leitlinien verteilen sich auf Dutzende Dokumente.
 
 **Chat DORA** macht diese Dokumente durchsuchbar und liefert strukturierte Analysen mit Artikelverweisen, Praxishinweisen und Quellenangaben.
 
@@ -27,11 +34,12 @@ Der **Digital Operational Resilience Act** (DORA) ist eine EU-Verordnung, die ab
                           │   Chat UI    │
                           └──────┬───────┘
                                  │
-                          ┌──────▼───────┐
-                          │  LangGraph   │
-                          │    Agent     │
-                          │  (Gemini 2)  │
-                          └──────┬───────┘
+                          ┌──────▼───────────┐
+                          │   LangGraph      │
+                          │     Agent        │
+                          │ DeepSeek V4 Flash│
+                          │  (via OpenRouter)│
+                          └──────┬───────────┘
                                  │
               ┌──────────────────┼──────────────────┐
               │                  │                   │
@@ -43,16 +51,17 @@ Der **Digital Operational Resilience Act** (DORA) ist eine EU-Verordnung, die ab
               │                  │                   │
               └──────────────────┼──────────────────┘
                                  │
-                    ┌────────────▼────────────┐
-                    │   OpenAI Embeddings     │
-                    │  text-embedding-3-large │
-                    │     (via OpenRouter)    │
-                    └────────────┬────────────┘
+                    ┌────────────▼─────────────┐
+                    │  Embeddings (OpenRouter) │
+                    │ openai/text-embedding-3- │
+                    │   small · 1536 Dim.      │
+                    └────────────┬─────────────┘
                                  │
-                    ┌────────────▼────────────┐
-                    │   Supabase pgvector     │
-                    │   1.406 Chunks / HNSW   │
-                    └─────────────────────────┘
+                    ┌────────────▼─────────────┐
+                    │  In-Memory Vektor-Store  │
+                    │  data/dora_vectors.npy   │
+                    │  1.406 Chunks · NumPy    │
+                    └──────────────────────────┘
 ```
 
 ### Warum 5 spezialisierte Such-Tools?
@@ -82,7 +91,7 @@ Nicht jedes Dokument lässt sich gleich aufteilen. Die Ingestion-Pipeline erkenn
 | QA | Q&A-ID-basiert | `DORA001`, `DORA002`, ... |
 | GL / GUIDE | Standard | Markdown-Headings, Absätze |
 
-Jeder Chunk wird mit Metadaten angereichert: Artikelnummer, Frage-Nr., Behörde, Kategorie, Quelldatei.
+Jeder Chunk wird mit Metadaten angereichert: Behörde, Kategorie, Dokumenttyp, Quelldatei.
 
 ---
 
@@ -116,70 +125,55 @@ Jede Antwort folgt einer festen Struktur (durch den System-Prompt erzwungen):
 
 ---
 
-## Quickstart
+## Quickstart (lokal in 3 Minuten)
 
-### Voraussetzungen
-
-- Python 3.11+
-- [Supabase](https://supabase.com)-Projekt mit pgvector
-- [OpenRouter](https://openrouter.ai)-API-Key (für Embeddings + LLM)
-
-### 1. Repo klonen & Dependencies installieren
+Die vorgerechneten Vektoren liegen schon im Repo (`data/`) — du musst **nichts neu indexieren**.
 
 ```bash
 git clone https://github.com/lennyduerr-ctrl/dora-rag.git
 cd dora-rag
 pip install -r requirements.txt
+
+cp .env.example .env        # dann OPENAI_API_KEY = dein OpenRouter-Key eintragen
+streamlit run app.py        # öffnet http://localhost:8501
 ```
 
-### 2. Umgebungsvariablen setzen
+Du brauchst nur einen **kostenlosen OpenRouter-Key** von https://openrouter.ai/keys.
+Alternativ ein CLI-Test ohne UI: `python -m src.chat`.
+
+---
+
+## Deployment auf Streamlit Community Cloud (kostenlos)
+
+1. Repo zu GitHub pushen und auf https://share.streamlit.io eine neue App aus
+   dem Repo erstellen (`app.py` als Entry-Point).
+2. Unter **Settings → Secrets** eintragen (TOML-Format):
+
+   ```toml
+   OPENAI_API_KEY = "sk-or-DEIN-OPENROUTER-KEY"
+   OPENAI_API_BASE = "https://openrouter.ai/api/v1"
+   OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
+   EMBEDDING_MODEL = "openai/text-embedding-3-small"
+   ```
+
+3. Speichern → die App startet (bzw. startet neu). Der Key liegt **nur** in den
+   Streamlit-Secrets, nie im Repo.
+
+---
+
+## Selbst bauen / Dokumente aktualisieren
+
+Die 38 Quell-PDFs liegen als ZIP im Repo: **`data/dora_docs.zip`**. So baust du den
+Vektor-Store neu (z.B. nach Doku-Updates oder mit einem anderen Embedding-Modell):
 
 ```bash
-cp .env.example .env
+unzip data/dora_docs.zip -d docs/      # 38 PDFs nach docs/
+python -m src.ingest                   # PDF -> Chunks -> Embeddings -> data/
 ```
 
-`.env` ausfüllen:
-
-```env
-OPENAI_API_KEY=sk-or-...          # OpenRouter API Key
-OPENAI_API_BASE=https://openrouter.ai/api/v1
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=eyJ...
-LANGSMITH_API_KEY=ls__...         # Optional: LangSmith Tracing
-LANGSMITH_PROJECT=dora-rag
-LANGSMITH_TRACING=true
-```
-
-### 3. Supabase einrichten
-
-Den Inhalt von `supabase_setup.sql` im [Supabase SQL Editor](https://supabase.com/dashboard) ausführen. Das erstellt:
-- `dora_chunks`-Tabelle mit pgvector (1536 Dimensionen)
-- HNSW-Index für Cosine Similarity
-- `match_dora_chunks`- und `match_dora_chunks_filtered`-Funktionen
-
-### 4. PDFs laden (Ingestion)
-
-Die 38 DORA-PDFs in den `docs/`-Ordner legen (Dateinamen-Schema beachten), dann:
-
-```bash
-python -m src.ingest
-```
-
-Das erzeugt ~1.400 Chunks mit Embeddings in Supabase.
-
-### 5. App starten
-
-```bash
-streamlit run app.py
-```
-
-Öffnet die Chat-UI unter `http://localhost:8501`.
-
-Alternativ CLI-Modus zum Testen:
-
-```bash
-python -m src.chat
-```
+`src/ingest.py` schreibt `data/dora_vectors.npy` (Embedding-Matrix) und
+`data/dora_chunks.jsonl.gz` (Texte + Metadaten). Beide Dateien werden committet,
+damit die App ohne Datenbank läuft.
 
 ---
 
@@ -187,20 +181,24 @@ python -m src.chat
 
 | Komponente | Technologie | Warum |
 |-----------|-------------|-------|
-| **LLM** | Gemini 2.0 Flash via OpenRouter | Schnell, günstig, guter Kontext |
-| **Embeddings** | OpenAI `text-embedding-3-large` (1536 Dim.) | State-of-the-Art Semantic Search |
-| **Vector Store** | Supabase pgvector + HNSW | Managed, SQL-basiert, RPC-Funktionen |
+| **LLM** | DeepSeek V4 Flash via OpenRouter | Schnell, günstig, gutes Reasoning |
+| **Embeddings** | `openai/text-embedding-3-small` via OpenRouter (1536 Dim.) | Ein Key für LLM **und** Embeddings |
+| **Vector Store** | In-Memory (NumPy, Cosine) aus `data/` | Kein externer Dienst, läuft kostenlos auf Streamlit Cloud |
 | **Agent Framework** | LangChain + LangGraph | Tool-Calling, Memory, Checkpointing |
 | **UI** | Streamlit | Schnell deployt, native Chat-Komponenten |
-| **Tracing** | LangSmith | Optional: Debugging von Agent-Entscheidungen |
 
 ### Warum OpenRouter?
 
-Ein API-Key für **Embeddings und LLM**. Modell jederzeit tauschbar (`OPENROUTER_MODEL` in `.env`), ohne Code-Änderung. Standard: `google/gemini-2.0-flash-001`.
+**Ein API-Key für Chat und Embeddings.** Das Chat-Modell ist über `OPENROUTER_MODEL`
+jederzeit tauschbar (z.B. `anthropic/claude-...`, `google/gemini-...`), ohne
+Code-Änderung. Standard: `deepseek/deepseek-v4-flash`.
 
-### Warum 1536 statt 3072 Dimensionen?
+### Warum ein In-Memory-Store statt einer Datenbank?
 
-OpenAI `text-embedding-3-large` unterstützt bis zu 3072 Dimensionen, aber Supabase pgvector hat ein praktisches Limit bei 2000 für HNSW-Indexierung. 1536 Dimensionen bieten einen guten Kompromiss aus Suchqualität und Performance.
+Bei ~1.400 Chunks ist eine Vektor-Datenbank überdimensioniert. Eine NumPy-Matrix
+im Speicher beantwortet jede Suche in Millisekunden, kommt ohne externen Dienst
+aus und macht das Repo **vollständig selbst-baubar** — perfekt für eine kostenlose
+Demo.
 
 ---
 
@@ -210,14 +208,18 @@ OpenAI `text-embedding-3-large` unterstützt bis zu 3072 Dimensionen, aber Supab
 dora-rag/
 ├── app.py                 # Streamlit Chat-UI
 ├── src/
-│   ├── config.py          # Env-Variablen und Settings
+│   ├── config.py          # Env-Variablen / OpenRouter-Settings
 │   ├── metadata.py        # Metadaten aus Dateinamen extrahieren
 │   ├── chunking.py        # Dokumenttyp-basiertes Chunking
-│   ├── ingest.py          # PDF -> Chunks -> Embeddings -> Supabase
+│   ├── ingest.py          # PDF -> Chunks -> Embeddings -> data/
+│   ├── vectorstore.py     # In-Memory Cosine-Suche + Metadaten-Filter
 │   ├── chain.py           # RAG Agent mit 5 Such-Tools + System-Prompt
 │   └── chat.py            # CLI-Chat zum Testen
-├── docs/                  # 38 DORA-PDFs (nicht in Git)
-├── supabase_setup.sql     # SQL Setup (Tabelle, Index, RPC-Funktionen)
+├── data/
+│   ├── dora_vectors.npy       # Embedding-Matrix (1406 x 1536)
+│   ├── dora_chunks.jsonl.gz   # Chunk-Texte + Metadaten
+│   └── dora_docs.zip          # 38 Quell-PDFs (zum Selbstbauen)
+├── docs/                  # entpackte PDFs (nicht in Git)
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
@@ -241,6 +243,8 @@ Welche Übergangsfristen gelten für bestehende IKT-Drittparteienverträge?
 
 ---
 
-## Lizenz
+## Lizenz / Hinweis
 
-Dieses Projekt dient ausschließlich internen Compliance-Zwecken. Die DORA-Dokumente unterliegen dem Urheberrecht der jeweiligen Herausgeber (EU, BaFin, EBA/ESMA/EIOPA, ECB/BBK).
+Dieses Projekt ist eine Demonstration. Die DORA-Dokumente unterliegen dem
+Urheberrecht der jeweiligen Herausgeber (EU, BaFin, EBA/ESMA/EIOPA, ECB/BBK). Die
+Antworten stellen **keine Rechtsberatung** dar.

@@ -1,7 +1,9 @@
 """DORA RAG Agent.
 
-Retrieval-augmented agent that answers DORA compliance questions
-by searching the Supabase vector store and generating responses via OpenRouter.
+Retrieval-augmented agent that answers DORA compliance questions by searching a
+local in-memory vector store (shipped in the repo) and generating responses via
+OpenRouter (DeepSeek). Both the chat model and the embeddings go through a single
+OpenRouter key — no external database required.
 
 Uses 5 specialized search tools with metadata filtering for targeted retrieval
 across regulations, BaFin guidance, ESA Q&As, and TIBER documents.
@@ -19,26 +21,30 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
-from supabase import create_client
 
+from src import vectorstore
 from src.config import (
+    EMBEDDING_MODEL,
     OPENAI_API_BASE,
     OPENAI_API_KEY,
     OPENROUTER_MODEL,
-    SUPABASE_SERVICE_KEY,
-    SUPABASE_URL,
 )
 
-# Initialize embeddings (same model/dimensions as ingestion)
-_embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-large",
-    dimensions=1536,
-    openai_api_key=OPENAI_API_KEY,
-    openai_api_base=OPENAI_API_BASE,
-)
+# Embeddings client, created on demand (keeps imports cheap and lets the app
+# boot even before a key is configured).
+_embeddings = None
 
-# Supabase client
-_supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+def _get_embeddings() -> OpenAIEmbeddings:
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = OpenAIEmbeddings(
+            model=EMBEDDING_MODEL,
+            openai_api_key=OPENAI_API_KEY,
+            openai_api_base=OPENAI_API_BASE,
+            check_embedding_ctx_length=False,  # OpenRouter doesn't expose tokenizer
+        )
+    return _embeddings
 
 
 # ---------------------------------------------------------------------------
@@ -126,28 +132,23 @@ def _search_filtered(
     authority: str | None = None,
     category: str | None = None,
 ) -> str:
-    """Embed query and search Supabase with optional metadata filters."""
-    query_vector = _embeddings.embed_query(query)
+    """Embed the query and search the in-memory store with optional filters."""
+    query_vector = _get_embeddings().embed_query(query)
 
-    params = {
-        "query_embedding": query_vector,
-        "match_threshold": 0.3,
-        "match_count": match_count,
-    }
-    if doc_types is not None:
-        params["filter_doc_types"] = doc_types
-    if authority is not None:
-        params["filter_authority"] = authority
-    if category is not None:
-        params["filter_category"] = category
+    rows = vectorstore.search(
+        query_vector,
+        match_count=match_count,
+        match_threshold=0.3,
+        doc_types=doc_types,
+        authority=authority,
+        category=category,
+    )
 
-    result = _supabase.rpc("match_dora_chunks_filtered", params).execute()
-
-    if not result.data:
+    if not rows:
         return "Keine relevanten Dokumente gefunden."
 
     chunks = []
-    for row in result.data:
+    for row in rows:
         meta = row["metadata"]
         source = meta.get("source_file", "Unbekannt")
         cat = meta.get("category", "")
